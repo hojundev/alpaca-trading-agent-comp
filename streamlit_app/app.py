@@ -99,10 +99,28 @@ import streamlit.components.v1 as components
 from alpaca_quant_agent import control, dashboard, ledger, universe
 from alpaca_quant_agent.config import load_config
 from alpaca_quant_agent.cycle import run_one_cycle
+from alpaca_quant_agent.execution.alpaca_mcp import AlpacaMcpClient
 from alpaca_quant_agent.scheduler import market_is_open
 
 config = load_config()
 interval_seconds = int(config.get("scheduler", "cycle_interval_minutes", default=15)) * 60
+
+
+@st.cache_data(ttl=60, show_spinner=False)
+def fetch_real_account_state(_config):
+    """Alpaca's own truth about the account -- equity, cash, and every
+    currently-open position -- regardless of who or what opened them.
+    Distinct from the ledger-based panels below, which only know about
+    positions THIS bot's own code opened; an account with prior activity
+    from another process (a teammate's daemon, manual trades) has real
+    positions the ledger has never heard of. Cached briefly since this is a
+    real network call (spins up the MCP subprocess) on every script rerun."""
+    async def _fetch():
+        async with AlpacaMcpClient(_config) as client:
+            account = await client.get_account()
+            positions = await client.get_positions()
+            return account, positions
+    return asyncio.run(_fetch())
 
 
 def fmt_usd(n, show_plus: bool = False) -> str:
@@ -171,6 +189,33 @@ new TradingView.widget({{
 }});
 </script>
 """, height=430)
+
+st.divider()
+
+# ---------- real account state, straight from Alpaca -- not the self-tracked ledger ----------
+st.subheader("Real Account State (direct from Alpaca)")
+st.caption("Equity, cash, and every open position exactly as Alpaca reports them right now — "
+           "includes positions opened by anyone/anything, not just this bot.")
+try:
+    real_account, real_positions = fetch_real_account_state(config)
+    rc1, rc2, rc3 = st.columns(3)
+    rc1.metric("Real Equity", fmt_usd(float(real_account.get("equity", 0))))
+    rc2.metric("Cash", fmt_usd(float(real_account.get("cash", 0))))
+    rc3.metric("Real Open Positions", len(real_positions))
+
+    if real_positions:
+        rp_df = pd.DataFrame(real_positions)
+        cols = ["symbol", "side", "qty", "avg_entry_price", "current_price", "market_value", "unrealized_pl", "unrealized_plpc"]
+        rp_df = rp_df[[c for c in cols if c in rp_df.columns]]
+        for numeric_col in ["qty", "avg_entry_price", "current_price", "market_value", "unrealized_pl", "unrealized_plpc"]:
+            if numeric_col in rp_df.columns:
+                rp_df[numeric_col] = pd.to_numeric(rp_df[numeric_col], errors="coerce")
+        rp_df.columns = [c.replace("_", " ").title() for c in rp_df.columns]
+        st.dataframe(rp_df, use_container_width=True, hide_index=True)
+    else:
+        st.caption("No open positions on this account right now.")
+except Exception as exc:  # noqa: BLE001 -- show it, don't crash the page
+    st.warning(f"Couldn't fetch real account state: {exc}")
 
 st.divider()
 

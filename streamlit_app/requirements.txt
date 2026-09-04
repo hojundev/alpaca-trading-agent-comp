@@ -6,3 +6,9 @@
 streamlit>=1.35.0
 streamlit-autorefresh>=1.0.1
 pandas>=2.2.0
+# execution/alpaca_mcp.py shells out to `uvx` to launch alpaca-mcp-server.
+# On your own machine that's provided by the systemwide `uv` install from
+# the README's prerequisites -- Streamlit Cloud's servers have no such
+# install, so it must come from this requirements.txt instead (the `uv`
+# PyPI package bundles a working `uvx` binary, no separate installer needed).
+uv>=0.4.0
