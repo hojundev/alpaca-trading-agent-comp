@@ -45,7 +45,7 @@ signals:
   # increase per-trade max loss (still capped at 2%/trade); it trades a thinner
   # VRP edge for more frequent entries. Production value is 40+. Do not go
   # below ~20 -- that is selling genuinely cheap volatility with little edge.
-  iv_rank_entry_threshold: 0    # DEMO: lowered to 0 to allow entries in a calm/low-vol market during the judging window (was 30). Thinner VRP edge; not the production value.
+  iv_rank_entry_threshold: 30   # percentile, sleeve A entries require IV rank >= this
   iv_rank_earnings_threshold: 80  # percentile, sleeve B entries require IV rank >= this
   momentum_lookback_days: 252   # ~12 months
   momentum_skip_days: 21        # skip most recent month (12-1 momentum)
@@ -82,7 +82,7 @@ strategy:
     target_dte_min: 30
     target_dte_max: 45
     short_delta_target: 0.22
-    short_delta_band: 0.10      # DEMO: widened from 0.05 so a valid short strike is more likely to be found and a spread can be built
+    short_delta_band: 0.05      # accept short strikes within +/- this of target
     spread_width_etf: 5.0
     spread_width_single_name: 5.0
     take_profit_pct_of_credit: 0.50   # close at 50% of max profit captured
@@ -127,7 +127,7 @@ risk_gates:
   daily_loss_halt_pct: -0.03
   total_drawdown_kill_switch_pct: -0.10
   min_open_interest: 100
-  max_bid_ask_spread_pct: 0.30       # DEMO: relaxed from 0.15 to avoid liquidity-gate rejections during the judging window
+  max_bid_ask_spread_pct: 0.15       # of mid price
 
 scheduler:
   cycle_interval_minutes: 15
