@@ -35,6 +35,50 @@ from streamlit_autorefresh import st_autorefresh
 
 st.set_page_config(page_title="VRP Agent — Live Demo", page_icon="📈", layout="wide")
 
+# ---------- restyle Streamlit's default widgets to match the custom dashboard ----------
+st.markdown("""
+<style>
+  #MainMenu, footer, header[data-testid="stHeader"] { visibility: hidden; height: 0; }
+  .block-container { padding-top: 1.5rem; max-width: 1400px; }
+
+  h1, h2, h3 { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif !important; letter-spacing: 0.2px; }
+  h1 { font-size: 1.5rem !important; }
+  h2, h3 { font-size: 0.95rem !important; text-transform: uppercase; letter-spacing: 0.6px; color: #8b93a7 !important; }
+
+  /* metric cards */
+  div[data-testid="stMetric"] {
+    background: #12161f; border: 1px solid #1f2531; border-radius: 10px;
+    padding: 14px 16px 10px 16px;
+  }
+  div[data-testid="stMetricLabel"] { color: #8b93a7 !important; font-size: 0.7rem !important; text-transform: uppercase; letter-spacing: 0.5px; }
+  div[data-testid="stMetricValue"] { font-size: 1.4rem !important; }
+  div[data-testid="stMetricDelta"] svg { display: none; }
+
+  /* progress bars */
+  div[data-testid="stProgress"] > div > div { background: #1a1f2b !important; }
+  div[data-testid="stProgress"] > div > div > div { background: linear-gradient(90deg, #2d9d70, #3ddc97) !important; }
+
+  /* dataframes */
+  div[data-testid="stDataFrame"] { border: 1px solid #1f2531; border-radius: 8px; overflow: hidden; }
+
+  /* expanders (decision feed) */
+  div[data-testid="stExpander"] {
+    background: #0e121a; border: 1px solid #191d27 !important; border-radius: 7px;
+  }
+
+  /* toggles */
+  div[data-testid="stToggle"] label p { font-size: 0.82rem; color: #8b93a7; }
+
+  hr { border-color: #1f2531 !important; margin: 1.2rem 0 !important; }
+
+  /* alerts/info boxes */
+  div[data-testid="stAlert"] { border-radius: 8px; }
+
+  ::-webkit-scrollbar { width: 8px; height: 8px; }
+  ::-webkit-scrollbar-thumb { background: #232a38; border-radius: 4px; }
+</style>
+""", unsafe_allow_html=True)
+
 # ---------- credentials: Streamlit secrets -> env vars, so config.load_config() finds them ----------
 for _key in ["ALPACA_API_KEY", "ALPACA_SECRET_KEY", "ALPACA_PAPER_TRADE", "FEATHERLESS_API_KEY", "FEATHERLESS_MODEL"]:
     if _key in st.secrets and _key not in os.environ:
@@ -50,7 +94,9 @@ if missing:
     )
     st.stop()
 
-from alpaca_quant_agent import control, dashboard
+import streamlit.components.v1 as components
+
+from alpaca_quant_agent import control, dashboard, ledger, universe
 from alpaca_quant_agent.config import load_config
 from alpaca_quant_agent.cycle import run_one_cycle
 from alpaca_quant_agent.scheduler import market_is_open
@@ -100,6 +146,34 @@ with halt_col2:
 
 st.divider()
 
+# ---------- live price chart: real market data, independent of whether the bot has traded yet ----------
+st.subheader("Live Price Chart")
+chart_symbol = st.selectbox("Symbol", options=list(universe.SYMBOLS),
+                             index=list(universe.SYMBOLS).index("SPY") if "SPY" in universe.SYMBOLS else 0)
+components.html(f"""
+<div class="tradingview-widget-container" style="height:420px;">
+  <div id="tv_chart" style="height:100%;"></div>
+</div>
+<script src="https://s3.tradingview.com/tv.js"></script>
+<script>
+new TradingView.widget({{
+  autosize: true,
+  symbol: "{chart_symbol}",
+  interval: "15",
+  timezone: "America/New_York",
+  theme: "dark",
+  style: "1",
+  locale: "en",
+  toolbar_bg: "#12161f",
+  enable_publishing: false,
+  studies: ["STD;EMA", "STD;ADX"],
+  container_id: "tv_chart",
+}});
+</script>
+""", height=430)
+
+st.divider()
+
 # ---------- the "scheduler": autorefresh forces a rerun every cycle_interval_minutes ----------
 st_autorefresh(interval=interval_seconds * 1000, key="cycle_autorefresh")
 
@@ -116,10 +190,16 @@ if due:
         try:
             if asyncio.run(market_is_open(config)):
                 summary = asyncio.run(run_one_cycle(config, dry_run=not current_live))
+                ledger.log_decision(config.db_path, candidate_id=None, symbol=None,
+                                     decision="cycle_ran", detail=summary)
             else:
                 summary = "Market closed — skipping this cycle."
+                ledger.log_decision(config.db_path, candidate_id=None, symbol=None,
+                                     decision="cycle_skipped", detail="market closed")
         except Exception as exc:  # noqa: BLE001 -- show it, don't crash the page
             summary = f"Cycle error: {exc}"
+            ledger.log_decision(config.db_path, candidate_id=None, symbol=None,
+                                 decision="cycle_error", detail=str(exc))
     st.session_state["last_summary"] = summary
     st.session_state["last_summary_at"] = datetime.now(timezone.utc).strftime("%H:%M:%S UTC")
 
@@ -128,6 +208,15 @@ if "last_summary" in st.session_state:
 else:
     seconds_until_due = max(0, int(interval_seconds - (now - last_run)))
     st.caption(f"Next cycle in ~{seconds_until_due}s (or on the next page refresh after that).")
+
+with st.expander("Cycle history (every check-in, not just trades)", expanded=False):
+    rows = ledger.recent_cycle_log(config.db_path, limit=30)
+    if rows:
+        hist = pd.DataFrame(rows)
+        hist.columns = ["Time", "Result", "Detail"]
+        st.dataframe(hist, use_container_width=True, hide_index=True)
+    else:
+        st.caption("No cycle attempts logged yet.")
 
 st.divider()
 

@@ -211,6 +211,21 @@ def record_equity_snapshot(
         )
 
 
+def recent_cycle_log(db_path: str, limit: int = 30) -> list[dict]:
+    """Every recorded cycle check-in (ran / skipped-market-closed / errored),
+    for a "is the scheduler actually alive" view -- distinct from the
+    trade/gate decision feed, which only has entries when a cycle actually
+    executed the screening pipeline."""
+    with connect(db_path) as conn:
+        rows = conn.execute(
+            """SELECT created_at, decision, detail FROM decisions
+               WHERE decision IN ('cycle_ran', 'cycle_skipped', 'cycle_error')
+               ORDER BY created_at DESC LIMIT ?""",
+            (limit,),
+        ).fetchall()
+        return [{"created_at": r[0], "decision": r[1], "detail": r[2]} for r in rows]
+
+
 def latest_equity_peak(db_path: str, fallback: float) -> float:
     with connect(db_path) as conn:
         row = conn.execute("SELECT MAX(equity_peak) FROM equity_snapshots").fetchone()

@@ -1,0 +1,13 @@
+# Dark theme matching the custom dashboard's palette
+# (alpaca_quant_agent/dashboard_static/index.html), so both viewers look
+# like one product instead of two unrelated tools.
+[theme]
+base = "dark"
+primaryColor = "#7c8cff"
+backgroundColor = "#0b0e14"
+secondaryBackgroundColor = "#12161f"
+textColor = "#e6e9ef"
+font = "monospace"
+
+[browser]
+gatherUsageStats = false

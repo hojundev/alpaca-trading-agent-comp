@@ -144,11 +144,11 @@
   .feed-item .fi-decision { font-size: 12px; font-weight: 600; }
   .feed-item .fi-time { font-size: 10.5px; color: var(--text-faint); font-family: var(--mono); }
   .feed-item .fi-detail { font-size: 11.5px; color: var(--text-dim); line-height: 1.4; word-break: break-word; }
-  .d-llm_approved, .d-open { color: var(--green); }
+  .d-llm_approved, .d-open, .d-cycle_ran { color: var(--green); }
   .d-gate_rejected, .d-llm_skipped { color: var(--text-dim); }
-  .d-no_candidates { color: var(--text-faint); }
+  .d-no_candidates, .d-cycle_skipped { color: var(--text-faint); }
   .d-hedge_executed, .d-hedge_noted { color: var(--blue); }
-  .d-close { color: var(--red); }
+  .d-close, .d-cycle_error { color: var(--red); }
 
   .empty-state {
     text-align: center; padding: 60px 20px; color: var(--text-dim);
